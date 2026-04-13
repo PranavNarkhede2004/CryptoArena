@@ -2,7 +2,11 @@ import { useEffect } from 'react';
 import { io } from 'socket.io-client';
 import usePriceStore from '../store/priceStore';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+let SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
+if (!SOCKET_URL) {
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  SOCKET_URL = apiBase.replace('/api', '').replace(/\/$/, '');
+}
 
 const usePriceSocket = () => {
   const { setPrices, setStatus } = usePriceStore();
