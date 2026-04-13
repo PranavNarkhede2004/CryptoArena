@@ -138,24 +138,37 @@ const fetchFromExchangeRateAPI = async () => {
 
 const refreshFxRate = async () => {
   const now = Date.now();
-  if (now - fxState.fetchedAt < FX_REFRESH_MS) return fxState.rate;
+  const timeSinceLastUpdate = now - fxState.fetchedAt;
+  
+  console.log(`[FX-DEBUG] Refresh check: time since last update: ${timeSinceLastUpdate}ms, threshold: ${FX_REFRESH_MS}ms`);
+  
+  if (timeSinceLastUpdate < FX_REFRESH_MS) {
+    console.log(`[FX-DEBUG] Using cached FX rate: ${fxState.rate}, age: ${Math.round(timeSinceLastUpdate/1000)}s`);
+    return fxState.rate;
+  }
   
   if (isCircuitBreakerOpen()) {
-    console.warn('FX API circuit breaker is open, using cached rate');
+    console.warn(`[FX-CIRCUIT] Circuit breaker OPEN - failures: ${circuitBreaker.failures}, time since last failure: ${Date.now() - circuitBreaker.lastFailureTime}ms`);
+    console.log(`[FX-CIRCUIT] Using cached rate: ${fxState.rate}`);
     return fxState.rate;
   }
 
+  console.log(`[FX-START] Starting FX rate refresh from multiple sources...`);
+  
   const fxSources = [
     { name: 'CoinGecko', fetch: fetchFromCoinGecko },
     { name: 'ExchangeRate-API', fetch: fetchFromExchangeRateAPI }
   ];
   
-  // Add fallback to static rate if all sources fail
-  const staticFallbackRate = 94.0; // Reasonable fallback rate
+  const staticFallbackRate = 94.0;
 
   for (const source of fxSources) {
+    console.log(`[FX-ATTEMPT] Trying ${source.name}...`);
     try {
+      const startTime = Date.now();
       const rate = await source.fetch();
+      const responseTime = Date.now() - startTime;
+      
       if (rate > 0) {
         fxState = { rate, fetchedAt: now };
         global.priceCache.set('USDTINR', {
@@ -167,19 +180,27 @@ const refreshFxRate = async () => {
           low: rate,
         });
         recordSuccess();
-        console.log(`FX rate updated from ${source.name}: ${rate}`);
+        console.log(`[FX-SUCCESS] ✅ ${source.name}: ${rate} (response: ${responseTime}ms, circuit reset)`);
         return rate;
+      } else {
+        console.warn(`[FX-INVALID] ${source.name} returned invalid rate: ${rate}`);
       }
     } catch (error) {
       recordFailure();
-      console.warn(`Failed to fetch FX rate from ${source.name}:`, error.message);
+      console.error(`[FX-ERROR] ❌ ${source.name} failed:`, {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        circuitFailures: circuitBreaker.failures,
+        responseTime: Date.now() - startTime
+      });
       continue;
     }
   }
 
   // If all sources fail and we have no cached rate, use static fallback
   if (!fxState.rate || fxState.rate <= 0) {
-    console.warn(`All FX sources failed, using static fallback rate: ${staticFallbackRate}`);
+    console.warn(`[FX-FALLBACK] All sources failed, using static fallback rate: ${staticFallbackRate}`);
     fxState = { rate: staticFallbackRate, fetchedAt: now };
     global.priceCache.set('USDTINR', {
       symbol: 'USDTINR',
@@ -189,9 +210,10 @@ const refreshFxRate = async () => {
       high: staticFallbackRate,
       low: staticFallbackRate,
     });
+  } else {
+    console.warn(`[FX-CACHED] Using last known rate: ${fxState.rate} (age: ${Math.round(timeSinceLastUpdate/1000)}s)`);
   }
   
-  console.error('All FX sources failed, using last known rate');
   return fxState.rate;
 };
 
@@ -345,89 +367,177 @@ const buildMarketPayload = (tickers) => {
 
 const startFallbackSimulation = () => {
   if (fallbackInterval || useStaticData) return;
-  console.log('Starting fallback polling with reduced frequency...');
+  console.log(`[FALLBACK-START] 🔄 Starting fallback polling - trying real API calls first...`);
+  console.log(`[FALLBACK-CONFIG] Check interval: 8s, max failures: 5`);
   let polling = false;
+  let realApiWorking = false;
   
   fallbackInterval = setInterval(async () => {
-    if (polling) return;
+    if (polling) {
+      console.log(`[FALLBACK-SKIP] Previous poll still running, skipping`);
+      return;
+    }
+    
     polling = true;
+    const pollStart = Date.now();
+    console.log(`[FALLBACK-POLL] Starting fallback poll #${consecutiveFailures + 1}...`);
     
     try {
       const usdtToInr = toNum(global.priceCache.get('USDTINR')?.lastPrice, fxState.rate || 0);
+      console.log(`[FALLBACK-FX] USD/INR rate: ${usdtToInr}`);
+      
       if (!(usdtToInr > 0)) {
+        console.log(`[FALLBACK-FX] No valid FX rate available, skipping poll`);
         polling = false;
         return;
       }
       
-      const symbols = TRACKED_BASES.map((base) => `${base}USDT`);
-      const apiEndpoints = [
-        'https://api.binance.com/api/v3/ticker/24hr',
-        'https://api1.binance.com/api/v3/ticker/24hr'
-      ];
+      // Try multiple API sources in order of preference
+      let success = false;
+      let payload = [];
       
-      const responses = await Promise.all(symbols.map(async (symbol) => {
-        for (const endpoint of apiEndpoints) {
-          try {
-            const response = await axios.get(endpoint, { 
-              params: { symbol }, 
-              timeout: 5000,
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; CryptoArena/1.0)'
-              }
-            });
-            return response;
-          } catch (error) {
-            continue;
+      // 1. Try Binance API first
+      console.log(`[FALLBACK-BINANCE] Trying Binance API endpoints...`);
+      try {
+        const symbols = TRACKED_BASES.map((base) => `${base}USDT`);
+        const apiEndpoints = [
+          'https://api.binance.com/api/v3/ticker/24hr',
+          'https://api1.binance.com/api/v3/ticker/24hr',
+          'https://api2.binance.com/api/v3/ticker/24hr'
+        ];
+        
+        console.log(`[FALLBACK-BINANCE] Fetching ${symbols.length} symbols from ${apiEndpoints.length} endpoints`);
+        
+        const responses = await Promise.all(symbols.map(async (symbol, idx) => {
+          for (const endpoint of apiEndpoints) {
+            try {
+              const startTime = Date.now();
+              const response = await axios.get(endpoint, { 
+                params: { symbol }, 
+                timeout: 5000,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (compatible; CryptoArena/1.0)'
+                }
+              });
+              const responseTime = Date.now() - startTime;
+              console.log(`[FALLBACK-BINANCE] ✅ ${symbol} from ${endpoint}: ${response.data.c} (${responseTime}ms)`);
+              return response;
+            } catch (error) {
+              console.warn(`[FALLBACK-BINANCE] ❌ ${symbol} from ${endpoint}: ${error.message}`);
+              continue;
+            }
+          }
+          throw new Error(`All endpoints failed for ${symbol}`);
+        }));
+        
+        responses.forEach((res, idx) => {
+          const t = res.data;
+          const base = TRACKED_BASES[idx];
+          const usdtLast = toNum(t.lastPrice);
+          if (!(usdtLast > 0)) {
+            console.warn(`[FALLBACK-BINANCE] Invalid price for ${base}: ${usdtLast}`);
+            return;
+          }
+          
+          const usdtData = {
+            symbol: `${base}USDT`,
+            lastPrice: usdtLast,
+            change24h: toNum(t.priceChangePercent),
+            volume: toNum(t.quoteVolume),
+            high: toNum(t.highPrice),
+            low: toNum(t.lowPrice),
+            source: 'binance-api'
+          };
+          global.priceCache.set(usdtData.symbol, usdtData);
+          payload.push(usdtData);
+          
+          if (usdtToInr > 0) {
+            const inrData = {
+              symbol: `${base}INR`,
+              lastPrice: usdtLast * usdtToInr,
+              change24h: toNum(t.priceChangePercent),
+              volume: toNum(t.quoteVolume) * usdtToInr,
+              high: toNum(t.highPrice) * usdtToInr,
+              low: toNum(t.lowPrice) * usdtToInr,
+              source: 'binance-api'
+            };
+            global.priceCache.set(inrData.symbol, inrData);
+            payload.push(inrData);
+          }
+        });
+        
+        if (payload.length > 0) {
+          success = true;
+          if (!realApiWorking) {
+            console.log(`[FALLBACK-SUCCESS] ✅ Binance API working! Using real data. Sample: ${payload[0].symbol}: ${payload[0].lastPrice}`);
+            realApiWorking = true;
+            stopStaticDataSimulation();
           }
         }
-        throw new Error(`All endpoints failed for ${symbol}`);
-      }));
+      } catch (error) {
+        console.error(`[FALLBACK-BINANCE] ❌ Binance API completely failed:`, {
+          message: error.message,
+          stack: error.stack
+        });
+      }
       
-      const payload = [];
-      responses.forEach((res, idx) => {
-        const t = res.data;
-        const base = TRACKED_BASES[idx];
-        const usdtLast = toNum(t.lastPrice);
-        if (!(usdtLast > 0)) return;
-        
-        const usdtData = {
-          symbol: `${base}USDT`,
-          lastPrice: usdtLast,
-          change24h: toNum(t.priceChangePercent),
-          volume: toNum(t.quoteVolume),
-          high: toNum(t.highPrice),
-          low: toNum(t.lowPrice),
-        };
-        global.priceCache.set(usdtData.symbol, usdtData);
-        payload.push(usdtData);
-        
-        if (usdtToInr > 0) {
-          const inrData = {
-            symbol: `${base}INR`,
-            lastPrice: usdtLast * usdtToInr,
-            change24h: toNum(t.priceChangePercent),
-            volume: toNum(t.quoteVolume) * usdtToInr,
-            high: toNum(t.highPrice) * usdtToInr,
-            low: toNum(t.lowPrice) * usdtToInr,
-          };
-          global.priceCache.set(inrData.symbol, inrData);
-          payload.push(inrData);
+      // 2. If Binance fails, try alternative exchanges
+      if (!success) {
+        console.log(`[FALLBACK-ALTERNATIVE] Binance failed, trying alternative exchanges...`);
+        try {
+          // Try Kraken API
+          const krakenStart = Date.now();
+          const krakenResponse = await axios.get('https://api.kraken.com/0/public/Ticker', {
+            params: { pair: 'BTCUSD,ETHUSD' },
+            timeout: 5000
+          });
+          const krakenTime = Date.now() - krakenStart;
+          
+          if (krakenResponse.data.result) {
+            console.log(`[FALLBACK-KRAKEN] ✅ Kraken API working! (${krakenTime}ms)`);
+            success = true;
+            // Process Kraken data here...
+          }
+        } catch (error) {
+          console.error(`[FALLBACK-KRAKEN] ❌ Kraken API failed:`, {
+            message: error.message,
+            status: error.response?.status
+          });
         }
-      });
+      }
       
-      if (payload.length && ioRef) {
+      const pollTime = Date.now() - pollStart;
+      
+      if (success && payload.length && ioRef) {
+        console.log(`[FALLBACK-BROADCAST] Broadcasting ${payload.length} prices to clients (${pollTime}ms total)`);
         ioRef.emit('price_update', payload);
         consecutiveFailures = 0;
       } else {
         consecutiveFailures++;
+        console.log(`[FALLBACK-FAILED] ❌ Fallback attempt ${consecutiveFailures} failed (${pollTime}ms)`);
+        
+        if (consecutiveFailures >= 5) {
+          console.log(`[FALLBACK-STATIC] ⚠️ Too many consecutive failures (${consecutiveFailures}), switching to static data simulation`);
+          useStaticData = true;
+          startStaticDataSimulation();
+          stopFallbackSimulation();
+          return;
+        }
       }
       
     } catch (error) {
-      console.warn('Fallback polling failed:', error.message);
+      const pollTime = Date.now() - pollStart;
+      console.error(`[FALLBACK-ERROR] ❌ Fallback polling failed:`, {
+        message: error.message,
+        stack: error.stack,
+        attempt: consecutiveFailures + 1,
+        duration: pollTime
+      });
+      
       consecutiveFailures++;
       
-      if (consecutiveFailures >= 3) {
-        console.log('Too many failures, switching to static data simulation');
+      if (consecutiveFailures >= 5) {
+        console.log(`[FALLBACK-STATIC] ⚠️ Error threshold reached, switching to static data simulation`);
         useStaticData = true;
         startStaticDataSimulation();
         stopFallbackSimulation();
@@ -436,7 +546,9 @@ const startFallbackSimulation = () => {
     } finally {
       polling = false;
     }
-  }, 10000); // Reduced frequency to avoid spam
+  }, 8000); // Check every 8 seconds
+  
+  console.log(`[FALLBACK-READY] Fallback simulation started`);
 };
 
 const stopFallbackSimulation = () => {
@@ -453,80 +565,205 @@ const getNextEndpoint = () => {
 };
 
 export const startPricePolling = (ioInstance) => {
-  ioRef = ioInstance;
-  refreshFxRate();
-  setInterval(() => { refreshFxRate(); }, FX_REFRESH_MS);
+  console.log(`[SERVICE-START] 🚀 Starting CryptoArena price polling service`);
+  console.log(`[SERVICE-CONFIG] Tracked bases: ${TRACKED_BASES.join(', ')}`);
+  console.log(`[SERVICE-CONFIG] FX refresh interval: ${FX_REFRESH_MS/1000}s`);
+  console.log(`[SERVICE-CONFIG] WebSocket endpoints: ${WEBSOCKET_ENDPOINTS.length}`);
   
-  // Start with static data immediately for reliability
-  startStaticDataSimulation();
+  ioRef = ioInstance;
+  
+  // Initial FX rate fetch
+  console.log(`[SERVICE-FX] Initial FX rate fetch...`);
+  refreshFxRate();
+  
+  // Set up periodic FX refresh
+  setInterval(() => { 
+    console.log(`[SERVICE-FX] Scheduled FX refresh...`);
+    refreshFxRate(); 
+  }, FX_REFRESH_MS);
+  
+  let realDataReceived = false;
+  let connectionAttempts = 0;
+  const maxConnectionAttempts = 3;
   
   const connect = () => {
-    if (useStaticData) return; // Don't connect if using static data
+    if (useStaticData && realDataReceived) {
+      console.log(`[WS-SKIP] Static data mode active, skipping WebSocket`);
+      return;
+    }
+    
+    connectionAttempts++;
+    console.log(`[WS-ATTEMPT] Connection attempt ${connectionAttempts}/${maxConnectionAttempts}`);
+    
+    if (connectionAttempts > maxConnectionAttempts) {
+      console.log(`[WS-MAX] Max connection attempts reached, switching to fallback polling`);
+      startFallbackSimulation();
+      return;
+    }
     
     const baseUrl = getNextEndpoint();
     const streams = TRACKED_BASES.map(base => `${base.toLowerCase()}usdt@ticker`).join('/');
     const wsUrl = `${baseUrl}?streams=${streams}`;
     
-    console.log(`Connecting to WebSocket endpoint: ${wsUrl}`);
+    console.log(`[WS-CONNECT] Attempt ${connectionAttempts}: Connecting to ${baseUrl}`);
+    console.log(`[WS-URL] Full URL: ${wsUrl}`);
+    console.log(`[WS-STREAMS] Subscribed streams: ${streams}`);
     
     try {
+      console.log(`[WS-CREATE] Creating WebSocket connection...`);
       wsClient = new WebSocket(wsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; CryptoArena/1.0)'
-        }
+        },
+        handshakeTimeout: 10000,
+        perMessageDeflate: false
       });
+      console.log(`[WS-CREATED] WebSocket object created successfully`);
     } catch (error) {
-      console.error('Failed to create WebSocket:', error.message);
-      setTimeout(connect, 10000);
+      console.error(`[WS-CREATE-ERROR] ❌ Failed to create WebSocket:`, {
+        message: error.message,
+        stack: error.stack,
+        url: wsUrl,
+        attempt: connectionAttempts
+      });
+      setTimeout(connect, 5000);
       return;
     }
 
+    let messageTimeout;
+    const resetMessageTimeout = () => {
+      clearTimeout(messageTimeout);
+      messageTimeout = setTimeout(() => {
+        console.log('No messages received for 30 seconds, reconnecting...');
+        wsClient.close();
+      }, 30000);
+    };
+
     wsClient.on('open', () => {
-      console.log('Connected to Binance WebSocket feed');
-      stopStaticDataSimulation();
+      console.log(`[WS-OPEN] ✅ WebSocket connection opened successfully`);
+      console.log(`[WS-STATE] Ready state: ${wsClient.readyState}`);
+      console.log(`[WS-ENDPOINT] Connected to: ${baseUrl}`);
+      resetMessageTimeout();
+      
+      // Stop static data only if we haven't received real data yet
+      if (!realDataReceived) {
+        console.log(`[WS-STATIC] Stopping static data simulation...`);
+        stopStaticDataSimulation();
+      }
     });
 
     wsClient.on('message', (raw) => {
       try {
+        resetMessageTimeout();
         const data = JSON.parse(raw.toString());
         
         let tickers = [];
         if (data.data && typeof data.data === 'object') {
           tickers = [data.data];
+          console.log(`[WS-DATA] Received single ticker: ${data.data.s}`);
         } else if (Array.isArray(data)) {
           tickers = data;
+          console.log(`[WS-DATA] Received array of ${data.length} tickers`);
         } else {
+          console.log(`[WS-DATA] Received unknown data format:`, typeof data);
           return;
         }
         
-        const payload = buildMarketPayload(tickers);
+        // Validate that we're getting real data
+        const validTickers = tickers.filter(ticker => {
+          const price = parseFloat(ticker.c);
+          const isValid = price > 0 && price < 1000000; // Sanity check for prices
+          if (!isValid) {
+            console.warn(`[WS-INVALID] Invalid price for ${ticker.s}: ${price}`);
+          }
+          return isValid;
+        });
         
-        if (payload.length) {
-          stopFallbackSimulation();
-          if (ioRef) {
+        console.log(`[WS-VALID] ${validTickers.length}/${tickers.length} tickers passed validation`);
+        
+        if (validTickers.length > 0) {
+          if (!realDataReceived) {
+            console.log(`[WS-FIRST] 🎉 FIRST REAL-TIME DATA RECEIVED! Switching to live mode.`);
+            console.log(`[WS-FIRST] Sample data: ${validTickers[0].s}: $${validTickers[0].c} (${validTickers[0].P}%)`);
+            realDataReceived = true;
+            connectionAttempts = 0;
+            console.log(`[WS-FIRST] Stopping static and fallback simulations...`);
+            stopStaticDataSimulation();
+            stopFallbackSimulation();
+          }
+          
+          const payload = buildMarketPayload(validTickers);
+          
+          if (payload.length && ioRef) {
+            console.log(`[WS-BROADCAST] Broadcasting ${payload.length} price updates to clients`);
             ioRef.emit('price_update', payload);
+          } else {
+            console.log(`[WS-EMPTY] No payload to broadcast`);
           }
         }
       } catch (error) {
-        console.error('WebSocket message parse error:', error.message);
+        console.error(`[WS-PARSE-ERROR] ❌ Message parse error:`, {
+          message: error.message,
+          rawData: raw.toString().substring(0, 200),
+          stack: error.stack
+        });
       }
     });
 
     wsClient.on('error', (error) => {
-      console.error('WebSocket error:', error.message);
-      startFallbackSimulation();
-      setTimeout(connect, 10000);
+      console.error(`[WS-ERROR] ❌ WebSocket error on attempt ${connectionAttempts}:`, {
+        message: error.message,
+        code: error.code,
+        errno: error.errno,
+        syscall: error.syscall,
+        address: error.address,
+        port: error.port,
+        stack: error.stack,
+        endpoint: baseUrl,
+        readyState: wsClient?.readyState
+      });
+      clearTimeout(messageTimeout);
+      
+      // Don't immediately fall back to static, try other endpoints first
+      if (connectionAttempts < maxConnectionAttempts) {
+        console.log(`[WS-RETRY] Retrying next endpoint in 3s...`);
+        setTimeout(connect, 3000);
+      } else {
+        console.log(`[WS-FAILED] All WebSocket attempts failed, starting fallback polling`);
+        startFallbackSimulation();
+      }
     });
 
-    wsClient.on('close', () => {
-      console.warn('WebSocket closed, reconnecting in 10s...');
-      startFallbackSimulation();
-      setTimeout(connect, 10000);
+    wsClient.on('close', (code, reason) => {
+      clearTimeout(messageTimeout);
+      console.warn(`[WS-CLOSE] ⚠️ WebSocket closed:`, {
+        code: code,
+        reason: reason || 'No reason provided',
+        wasClean: wsClient?.readyState === WebSocket.CLOSED,
+        hadRealData: realDataReceived,
+        endpoint: baseUrl,
+        attempt: connectionAttempts
+      });
+      
+      if (realDataReceived) {
+        console.log(`[WS-RECONNECT] Real data was working, attempting reconnection in 5s...`);
+        setTimeout(connect, 5000);
+      } else {
+        console.log(`[WS-FALLBACK] No real data received, starting fallback simulation`);
+        startFallbackSimulation();
+      }
     });
   };
 
-  // Try WebSocket connection with delay
-  setTimeout(connect, 5000);
+  // Start fallback polling immediately as backup
+  console.log(`[SERVICE-BACKUP] Starting fallback polling as backup...`);
+  startFallbackSimulation();
+  
+  // Try WebSocket connection after a short delay
+  console.log(`[SERVICE-DELAY] Waiting 2s before WebSocket connection attempt...`);
+  setTimeout(connect, 2000);
+  
+  console.log(`[SERVICE-READY] CryptoArena price polling service initialized`);
 };
 
 export const getCachedPrices = () => {
