@@ -131,7 +131,7 @@ const ChartPanel = ({ symbol, livePrice, change24h }) => {
           <iframe
             key={`${symbol}-${tvSymbol}`}
             title="dashboard-tradingview"
-            src={`https://s.tradingview.com/widgetembed/?symbol=${tvSymbol}&interval=${timeframe === '1W' ? 'W' : timeframe === '1D' ? 'D' : timeframe === '4H' ? '240' : '60'}&range=6M&theme=dark&style=1&toolbarbg=080B11&hide_top_toolbar=0&hide_legend=0&saveimage=0`}
+            src={`https://s.tradingview.com/widgetembed/?symbol=${tvSymbol}&interval=${timeframe === '1W' ? 'W' : timeframe === '1D' ? 'D' : timeframe === '4H' ? '240' : '60'}&theme=dark&style=1&toolbarbg=080B11&hide_top_toolbar=0&hide_legend=0&saveimage=0`}
             width="100%"
             height="100%"
             frameBorder="0"

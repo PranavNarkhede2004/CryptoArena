@@ -1,6 +1,9 @@
 # CryptoArena ⚡️
 
+[![Live Deployment](https://img.shields.io/badge/Live_Deployment-View_Site-00D084?style=for-the-badge&logo=vercel)](https://crypto-arena-black.vercel.app/)
+
 A premium, full-stack cryptocurrency paper-trading platform designed to mirror real market dynamics without financial risk. Built with the MERN stack and real-time WebSocket integrations, CryptoArena empowers users to practice crypto trading using live data straight from Binance.
+
 
 ## Features
 - **Real-Time Market Data**: Live crypto price feeds updating instantly via WebSocket connections to Binance.

@@ -1,7 +1,15 @@
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
+// Automatically append /api if the Vercel environment variable omitted it
+if (API_BASE_URL.endsWith('/')) {
+  API_BASE_URL = API_BASE_URL.slice(0, -1);
+}
+if (!API_BASE_URL.endsWith('/api')) {
+  API_BASE_URL += '/api';
+}
 
 const instance = axios.create({
   baseURL: API_BASE_URL,

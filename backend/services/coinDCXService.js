@@ -7,7 +7,7 @@ let wsClient = null;
 let fallbackInterval = null;
 let ioRef = null;
 
-const BINANCE_STREAM_URL = 'wss://stream.binance.com:9443/ws/!ticker@arr';
+const BINANCE_STREAM_URL = 'wss://stream.binance.us:9443/ws/!ticker@arr';
 const TRACKED_BASES = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'MATIC', 'DOGE'];
 const FX_REFRESH_MS = 10 * 60 * 1000;
 let fxState = { rate: null, fetchedAt: 0 };
@@ -159,7 +159,7 @@ const startFallbackSimulation = () => {
         return;
       }
       const symbols = TRACKED_BASES.map((base) => `${base}USDT`);
-      const responses = await Promise.all(symbols.map((symbol) => axios.get('https://api.binance.com/api/v3/ticker/24hr', { params: { symbol }, timeout: 5000 })));
+      const responses = await Promise.all(symbols.map((symbol) => axios.get('https://api.binance.us/api/v3/ticker/24hr', { params: { symbol }, timeout: 5000 })));
       const payload = [];
       responses.forEach((res, idx) => {
         const t = res.data;
