@@ -7,7 +7,20 @@ let wsClient = null;
 let fallbackInterval = null;
 let ioRef = null;
 
-const BINANCE_STREAM_URL = 'wss://stream.binance.com:9443/stream';
+// Multiple WebSocket endpoints for redundancy
+const WEBSOCKET_ENDPOINTS = [
+  'wss://stream.binance.com:9443/stream',
+  'wss://stream.binance.com:443/stream',
+  'wss://data-stream.binance.vision/stream',
+  'wss://stream.binance.us:9443/stream'
+];
+
+let currentEndpointIndex = 0;
+const getNextEndpoint = () => {
+  const endpoint = WEBSOCKET_ENDPOINTS[currentEndpointIndex];
+  currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
+  return endpoint;
+};
 const TRACKED_BASES = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'MATIC', 'DOGE'];
 const FX_REFRESH_MS = 30 * 1000;
 let fxState = { rate: null, fetchedAt: 0 };
@@ -90,7 +103,10 @@ const fetchFromCoinGecko = async () => {
   try {
     const res = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
       params: { ids: 'tether', vs_currencies: 'inr' },
-      timeout: 3000,
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; CryptoArena/1.0)'
+      }
     });
     const rate = toNum(res?.data?.tether?.inr, 0);
     const validation = validateFxRate(rate);
@@ -99,6 +115,11 @@ const fetchFromCoinGecko = async () => {
     }
     return rate;
   } catch (error) {
+    if (error.response?.status === 429) {
+      console.warn('CoinGecko rate limited, backing off...');
+      // Add delay for rate limiting
+      await new Promise(resolve => setTimeout(resolve, 60000));
+    }
     console.warn('CoinGecko FX API failed:', error.message);
     throw error;
   }
@@ -175,12 +196,15 @@ const refreshFxRate = async () => {
     return fxState.rate;
   }
 
-  const fxSources = [
+    const fxSources = [
     { name: 'CoinGecko', fetch: fetchFromCoinGecko },
     { name: 'ExchangeRate-API', fetch: fetchFromExchangeRateAPI },
     { name: 'Alpha Vantage', fetch: fetchFromAlphaVantage },
     { name: 'Fixer', fetch: fetchFromFixer }
   ];
+  
+  // Add fallback to static rate if all sources fail
+  const staticFallbackRate = 94.0; // Reasonable fallback rate
 
   for (const source of fxSources) {
     try {
@@ -206,6 +230,20 @@ const refreshFxRate = async () => {
     }
   }
 
+  // If all sources fail and we have no cached rate, use static fallback
+  if (!fxState.rate || fxState.rate <= 0) {
+    console.warn(`All FX sources failed, using static fallback rate: ${staticFallbackRate}`);
+    fxState = { rate: staticFallbackRate, fetchedAt: now };
+    global.priceCache.set('USDTINR', {
+      symbol: 'USDTINR',
+      lastPrice: staticFallbackRate,
+      change24h: 0,
+      volume: 0,
+      high: staticFallbackRate,
+      low: staticFallbackRate,
+    });
+  }
+  
   console.error('All FX sources failed, using last known rate');
   return fxState.rate;
 };
@@ -315,7 +353,36 @@ const startFallbackSimulation = () => {
         return;
       }
       const symbols = TRACKED_BASES.map((base) => `${base}USDT`);
-      const responses = await Promise.all(symbols.map((symbol) => axios.get('https://api.binance.com/api/v3/ticker/24hr', { params: { symbol }, timeout: 5000 })));
+      // Try multiple API endpoints for redundancy
+      const apiEndpoints = [
+        'https://api.binance.com/api/v3/ticker/24hr',
+        'https://api1.binance.com/api/v3/ticker/24hr',
+        'https://api2.binance.com/api/v3/ticker/24hr',
+        'https://api3.binance.com/api/v3/ticker/24hr'
+      ];
+      
+      const responses = await Promise.all(symbols.map(async (symbol) => {
+        let lastError;
+        
+        for (const endpoint of apiEndpoints) {
+          try {
+            const response = await axios.get(endpoint, { 
+              params: { symbol }, 
+              timeout: 3000,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; CryptoArena/1.0)'
+              }
+            });
+            return response;
+          } catch (error) {
+            lastError = error;
+            console.warn(`API endpoint ${endpoint} failed for ${symbol}:`, error.message);
+            continue;
+          }
+        }
+        
+        throw lastError || new Error(`All endpoints failed for ${symbol}`);
+      }));
       const payload = [];
       responses.forEach((res, idx) => {
         const t = res.data;
@@ -350,6 +417,17 @@ const startFallbackSimulation = () => {
       if (payload.length && ioRef) ioRef.emit('price_update', payload);
     } catch (error) {
       console.warn('Fallback real polling failed:', error.message);
+      
+      // Try to get cached prices and broadcast them anyway
+      const cachedPrices = Array.from(global.priceCache.values())
+        .filter(price => TRACKED_BASES.some(base => 
+          price.symbol === `${base}USDT` || price.symbol === `${base}INR`
+        ));
+      
+      if (cachedPrices.length > 0 && ioRef) {
+        console.log(`Broadcasting ${cachedPrices.length} cached prices due to API failure`);
+        ioRef.emit('price_update', cachedPrices);
+      }
     } finally {
       polling = false;
     }
@@ -371,11 +449,23 @@ export const startPricePolling = (ioInstance) => {
   
   // Create combined streams for all tracked symbols
   const streams = TRACKED_BASES.map(base => `${base.toLowerCase()}usdt@ticker`).join('/');
-  const wsUrl = `${BINANCE_STREAM_URL}?streams=${streams}`;
   
   const connect = () => {
-    console.log(`Connecting to Binance WebSocket: ${wsUrl}`);
-    wsClient = new WebSocket(wsUrl);
+    const baseUrl = getNextEndpoint();
+    const wsUrl = `${baseUrl}?streams=${streams}`;
+    console.log(`Connecting to WebSocket endpoint ${currentEndpointIndex}: ${wsUrl}`);
+    
+    try {
+      wsClient = new WebSocket(wsUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; CryptoArena/1.0)'
+        }
+      });
+    } catch (error) {
+      console.error('Failed to create WebSocket:', error.message);
+      setTimeout(connect, 5000);
+      return;
+    }
 
     wsClient.on('open', () => {
       console.log('Connected to Binance WebSocket feed');
@@ -420,14 +510,25 @@ export const startPricePolling = (ioInstance) => {
     });
 
     wsClient.on('error', (error) => {
-      console.error('Binance WebSocket error:', error.message);
+      console.error(`WebSocket error on endpoint ${currentEndpointIndex}:`, error.message);
       startFallbackSimulation();
+      
+      // Try next endpoint after delay
+      setTimeout(() => {
+        console.log('Trying next WebSocket endpoint...');
+        connect();
+      }, 5000);
     });
 
-    wsClient.on('close', () => {
-      console.warn('Binance WebSocket closed. Reconnecting in 3s...');
+    wsClient.on('close', (code, reason) => {
+      console.warn(`WebSocket closed with code ${code}: ${reason || 'No reason provided'}`);
       startFallbackSimulation();
-      setTimeout(connect, 3000);
+      
+      // Try next endpoint after delay
+      setTimeout(() => {
+        console.log('Attempting to reconnect with next endpoint...');
+        connect();
+      }, 3000);
     });
   };
 
