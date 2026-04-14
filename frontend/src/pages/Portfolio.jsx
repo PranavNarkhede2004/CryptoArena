@@ -722,7 +722,7 @@ const Portfolio = () => {
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('live')}>Live Price</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('value')}>Current Value</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('pnl')}>PnL ₹</th>
-              <th className="p-4 text-right"><PercentageBadge val={h.pnlPercent || 0} /></th>
+              <th className="p-4 text-right cursor-pointer" onClick={() => onSort('pnlPct')}>PnL %</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('change24h')}>24h Change %</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('weight')}>Weight %</th>
               <th className="p-4 text-center">Actions</th>
