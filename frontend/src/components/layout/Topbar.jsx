@@ -8,9 +8,26 @@ import { useQuery } from '@tanstack/react-query';
 import axios from '../../api/axios';
 
 const Topbar = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateBalance } = useAuthStore();
   const { connectionStatus, prices } = usePriceStore();
   const navigate = useNavigate();
+
+  // Fetch real-time user data to get updated balance
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUserTopbar'],
+    queryFn: async () => (await axios.get('/users/current')).data,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    staleTime: 25000, // Consider stale after 25 seconds
+    onSuccess: (data) => {
+      // Update the auth store with fresh balance
+      if (data?.virtualBalance !== undefined) {
+        updateBalance(data.virtualBalance);
+      }
+    }
+  });
+
+  // Use the real-time balance if available, otherwise fall back to stored user data
+  const currentBalance = currentUser?.virtualBalance || user?.virtualBalance || 0;
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const [showMenu, setShowMenu] = useState(false);
   const [theme, setTheme] = useState('dark');
@@ -165,7 +182,7 @@ const Topbar = () => {
         <div className="hidden md:block text-right">
           <div className="text-[10px] text-textMuted uppercase font-heading font-medium tracking-[0.14em]">Available Balance</div>
           <div className="text-sm font-mono text-accent glow-green font-semibold">
-            ₹{user?.virtualBalance?.toLocaleString()}
+            ₹{currentBalance.toLocaleString()}
           </div>
         </div>
 

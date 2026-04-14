@@ -2,14 +2,27 @@ import { useQuery } from '@tanstack/react-query';
 import axios from '../api/axios';
 import { Trophy, Medal, AlertCircle } from 'lucide-react';
 import useAuthStore from '../store/authStore';
+import { useEffect } from 'react';
 
 const Leaderboard = () => {
   const { user } = useAuthStore();
 
-  const { data: leaders, isLoading } = useQuery({
+  const { data: leaders, isLoading, refetch } = useQuery({
     queryKey: ['leaderboard'],
-    queryFn: async () => (await axios.get('/users/leaderboard')).data
+    queryFn: async () => (await axios.get('/users/leaderboard')).data,
+    refetchInterval: 10 * 60 * 1000, // 10 minutes in milliseconds
+    refetchIntervalInBackground: true, // Continue refreshing when tab is not active
+    staleTime: 9 * 60 * 1000, // Consider data stale after 9 minutes
   });
+
+  // Manual refresh effect for additional control
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch();
+    }, 10 * 60 * 1000); // 10 minutes
+
+    return () => clearInterval(interval);
+  }, [refetch]);
 
   if (isLoading) return <div className="p-8 font-mono text-textMuted uppercase tracking-widest text-center">Fetching rankings...</div>;
 

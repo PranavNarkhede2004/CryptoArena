@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import usePriceStore from '../store/priceStore';
 import useAuthStore from '../store/authStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import QuantitySlider from '../components/ui/QuantitySlider';
 import CoinLogo from '../components/ui/CoinLogo';
 import PriceFlash from '../components/ui/PriceFlash';
+import { ChevronDown } from 'lucide-react';
 
 const toNum = (value, fallback = 0) => {
   const n = Number(value);
@@ -165,6 +166,20 @@ const TradePage = () => {
   const { prices } = usePriceStore();
   const { user, updateBalance } = useAuthStore();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  
+  const [showCoinSelector, setShowCoinSelector] = useState(false);
+  
+  // Available coins for trading
+  const availableCoins = [
+    'BTCINR', 'ETHINR', 'BNBINR', 'SOLINR', 'XRPINR', 
+    'ADAINR', 'MATICINR', 'DOGEINR'
+  ];
+  
+  const handleCoinSelect = (coinSymbol) => {
+    setShowCoinSelector(false);
+    navigate(`/trade/${coinSymbol}`);
+  };
   
   const activeSymbol = resolveTradableSymbol(symbol, prices);
   const coinData = prices[activeSymbol];
@@ -280,47 +295,107 @@ const TradePage = () => {
     }
   }, [searchParams, effectivePrice, holding]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Close coin selector when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showCoinSelector && !event.target.closest('.coin-selector-wrapper')) {
+        setShowCoinSelector(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showCoinSelector]);
+
   return (
     <div className="w-full h-full flex flex-col -m-4 lg:-m-6 bg-base">
       
       {/* Header Bar */}
-      <div className="h-[60px] premium-card rounded-none flex items-center px-4 border-b border-borderSubtle shrink-0">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3 pr-6 border-r border-[#1E2D3D]">
-            <CoinLogo symbol={activeSymbol} size={32} />
-            <span className="font-heading font-bold text-xl text-white tracking-widest">{activeSymbol.replace('INR','')}</span>
+      <div className="h-auto sm:h-[60px] premium-card rounded-none flex flex-col sm:flex-row items-start sm:items-center px-3 sm:px-4 py-3 sm:py-4 border-b border-borderSubtle shrink-0">
+        <div className="flex items-center gap-3 sm:gap-6 w-full">
+          <div className="flex items-center gap-2 sm:gap-3 pr-3 sm:pr-6 border-r border-[#1E2D3D] relative coin-selector-wrapper">
+            <button
+              onClick={() => setShowCoinSelector(!showCoinSelector)}
+              className="flex items-center gap-2 hover:bg-elevated px-2 py-1 rounded transition-colors"
+            >
+              <CoinLogo symbol={activeSymbol} size={24} className="sm:size-32" />
+              <span className="font-heading font-bold text-lg sm:text-xl text-white tracking-widest">{activeSymbol.replace('INR','')}</span>
+              <ChevronDown size={14} className="text-textMuted" />
+            </button>
+            
+            {/* Coin Selector Dropdown */}
+            {showCoinSelector && (
+              <div className="absolute top-full left-0 mt-2 w-48 sm:w-56 premium-card rounded-lg shadow-xl z-50">
+                <div className="p-2">
+                  {availableCoins.map((coin) => (
+                    <button
+                      key={coin}
+                      onClick={() => handleCoinSelect(coin)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-elevated transition-colors text-left ${
+                        coin === activeSymbol ? 'bg-accent/20 text-accent' : 'text-textPrimary'
+                      }`}
+                    >
+                      <CoinLogo symbol={coin} size={20} />
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{coin.replace('INR','')}</div>
+                        <div className="text-xs text-textMuted">
+                          ₹{prices[coin]?.lastPrice?.toLocaleString(undefined, {maximumFractionDigits:2}) || '---'}
+                        </div>
+                      </div>
+                      {coin === activeSymbol && (
+                        <div className="w-2 h-2 bg-accent rounded-full"></div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <div>
-            <PriceFlash val={effectivePrice} className="block">
-              <span className={`text-xl font-mono font-medium ${toNum(effectiveTicker?.change24h) >= 0 ? 'text-accent glow-green' : 'text-danger'}`}>
-                ₹{formatNum(effectivePrice, 2)}
-              </span>
-            </PriceFlash>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div>
+              <PriceFlash val={effectivePrice} className="block">
+                <span className={`text-lg sm:text-xl font-mono font-medium ${toNum(effectiveTicker?.change24h) >= 0 ? 'text-accent glow-green' : 'text-danger'}`}>
+                  ₹{formatNum(effectivePrice, 2)}
+                </span>
+              </PriceFlash>
+            </div>
+            <div className={`text-sm font-mono ${toNum(effectiveTicker?.change24h) >= 0 ? 'text-accent' : 'text-danger'}`}>
+              {toNum(effectiveTicker?.change24h) >= 0 ? '+' : ''}{toNum(effectiveTicker?.change24h).toFixed(2)}%
+            </div>
           </div>
-          <div className="flex gap-4 font-mono text-[11px] text-textMuted hidden md:flex">
-             <div className="flex flex-col"><span className="text-textSecondary uppercase">24h Change</span><span className={toNum(effectiveTicker?.change24h) >= 0 ? 'text-accent' : 'text-danger'}>{toNum(effectiveTicker?.change24h).toFixed(2)}%</span></div>
-             <div className="flex flex-col"><span className="text-textSecondary uppercase">24h High</span><span>{formatNum(high24h, 2)}</span></div>
-             <div className="flex flex-col"><span className="text-textSecondary uppercase">24h Low</span><span>{formatNum(low24h, 2)}</span></div>
-             <div className="flex flex-col"><span className="text-textSecondary uppercase">24h Vol</span><span>{(volume24h / 1000).toFixed(2)}K {activeSymbol.replace('INR','')}</span></div>
-          </div>
+        </div>
+        
+        {/* Mobile Stats */}
+        <div className="flex gap-3 sm:gap-4 font-mono text-[10px] sm:text-[11px] text-textMuted mt-2 sm:mt-0 sm:hidden">
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">H</span><span>{formatNum(high24h, 2)}</span></div>
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">L</span><span>{formatNum(low24h, 2)}</span></div>
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">Vol</span><span>{(volume24h / 1000).toFixed(1)}K</span></div>
+        </div>
+        
+        {/* Desktop Stats */}
+        <div className="flex gap-4 font-mono text-[11px] text-textMuted hidden md:flex">
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">24h Change</span><span className={toNum(effectiveTicker?.change24h) >= 0 ? 'text-accent' : 'text-danger'}>{toNum(effectiveTicker?.change24h).toFixed(2)}%</span></div>
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">24h High</span><span>{formatNum(high24h, 2)}</span></div>
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">24h Low</span><span>{formatNum(low24h, 2)}</span></div>
+          <div className="flex flex-col"><span className="text-textSecondary uppercase">24h Vol</span><span>{(volume24h / 1000).toFixed(2)}K {activeSymbol.replace('INR','')}</span></div>
         </div>
       </div>
 
       {/* Main Terminal Area */}
-      <div className="flex-1 flex flex-col xl:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
         {/* Left: Chart */}
-        <div className="flex-1 border-r border-borderSubtle relative min-h-[460px] premium-card rounded-none">
+        <div className="flex-1 lg:border-r border-borderSubtle relative min-h-[300px] lg:min-h-[460px] premium-card rounded-none">
            <ProfessionalChart symbol={activeSymbol} />
         </div>
 
         {/* Middle: Order Book (Hidden on small screens) */}
-        <div className="w-[300px] shrink-0 hidden lg:block premium-card rounded-none">
+        <div className="w-full lg:w-[300px] shrink-0 hidden xl:block premium-card rounded-none">
            <SimulatedOrderBook price={effectivePrice} />
         </div>
 
         {/* Right: Order Panel */}
-        <div className="w-full xl:w-[320px] shrink-0 premium-card rounded-none flex flex-col overflow-y-auto">
+        <div className="w-full lg:w-[320px] xl:w-[320px] shrink-0 premium-card rounded-none flex flex-col overflow-y-auto">
           
           <div className="flex p-1 bg-elevated border-b border-borderSubtle">
             <button className="flex-1 py-1.5 text-xs font-bold text-white bg-surface rounded shadow-sm">Market</button>
@@ -342,10 +417,10 @@ const TradePage = () => {
               </button>
             </div>
 
-            <div className="flex justify-between items-center mb-2 font-mono text-[11px] text-textMuted uppercase tracking-wider pl-1">
+            <div className="flex justify-between items-center mb-2 font-mono text-[10px] sm:text-[11px] text-textMuted uppercase tracking-wider pl-1">
               <span>Avail</span>
-              <span className="text-white bg-elevated px-1.5 py-0.5 rounded cursor-pointer border border-[#1E2D3D]">
-                {side === 'BUY' ? `₹${user?.virtualBalance?.toLocaleString()}` : `${holding.toFixed(6)} ${activeSymbol.replace('INR','')}`}
+              <span className="text-white bg-elevated px-1.5 py-0.5 rounded cursor-pointer border border-[#1E2D3D] text-xs">
+                {side === 'BUY' ? `₹${(user?.virtualBalance / 1000).toFixed(1)}K` : `${holding.toFixed(4)} ${activeSymbol.replace('INR','')}`}
               </span>
             </div>
 

@@ -551,9 +551,9 @@ const Portfolio = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="premium-card rounded-xl px-3 pt-2 pb-0 col-span-1 md:col-span-2 xl:col-span-4">
-          <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
+      <div className="grid grid-cols-1 gap-4">
+        <div className="premium-card rounded-xl px-3 pt-2 pb-0">
+          <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto no-scrollbar">
             {[
               { id: 'overview', label: 'Overview' },
               { id: 'holdings', label: 'Holdings' },
@@ -563,7 +563,7 @@ const Portfolio = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative px-1 py-2.5 text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'text-white border-accent' : 'text-textMuted border-transparent'}`}
+                className={`relative px-1 sm:px-2 py-2.5 text-xs sm:text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id ? 'text-white border-accent' : 'text-textMuted border-transparent'}`}
               >
                 {tab.label}
               </button>
@@ -574,25 +574,25 @@ const Portfolio = () => {
 
       {activeTab === 'overview' && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {cards.map((c, i) => (
               <SummaryCard key={c.title} idx={i} title={c.title} value={c.value} sub={c.sub} tone={c.tone} onClick={c.onClick} />
             ))}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="premium-card rounded-xl p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="premium-card rounded-xl p-3 sm:p-4">
               <div className="text-xs uppercase tracking-[0.16em] text-textMuted mb-3">Asset Allocation</div>
-              <div className="relative h-[320px]">
+              <div className="relative h-[280px] sm:h-[320px]">
                 <Doughnut data={donutData} options={donutOptions} />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="text-[11px] text-textMuted uppercase">Total Value</div>
-                    <div className="text-xl font-mono text-white">₹{fmt(totalPortfolioValue, 2)}</div>
+                    <div className="text-[10px] sm:text-[11px] text-textMuted uppercase">Total Value</div>
+                    <div className="text-lg sm:text-xl font-mono text-white">₹{fmt(totalPortfolioValue, 2)}</div>
                   </div>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {allocationRows.map((h) => (
                   <button
                     key={`legend-${h.symbol}`}
@@ -612,10 +612,10 @@ const Portfolio = () => {
               </div>
             </div>
 
-            <div className="premium-card rounded-xl p-4">
+            <div className="premium-card rounded-xl p-3 sm:p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-xs uppercase tracking-[0.16em] text-textMuted">PnL History</div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-wrap">
                   {['1D', '1W', '1M', '3M', 'ALL'].map((tab) => (
                     <button
                       key={tab}
@@ -627,7 +627,7 @@ const Portfolio = () => {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-4 mb-2 text-xs text-textSecondary">
+              <div className="flex items-center gap-2 sm:gap-4 mb-2 text-xs text-textSecondary">
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input type="checkbox" checked={showRealized} onChange={(e) => setShowRealized(e.target.checked)} />
                   Realized
@@ -637,7 +637,7 @@ const Portfolio = () => {
                   Unrealized
                 </label>
               </div>
-              <div className="h-[320px]">
+              <div className="h-[280px] sm:h-[320px]">
                 <Line data={lineData} options={lineOptions} />
               </div>
             </div>
@@ -647,20 +647,72 @@ const Portfolio = () => {
 
       {activeTab === 'holdings' && (
         <>
-          <div className="premium-card rounded-xl p-4">
-        <div className="flex items-center gap-3 mb-4">
+          <div className="premium-card rounded-xl p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search holdings..."
-            className="premium-input rounded-lg px-3 py-2 text-sm w-72"
+            className="premium-input rounded-lg px-3 py-2 text-sm w-full sm:w-72"
           />
           <label className="text-xs text-textSecondary flex items-center gap-2">
             <input type="checkbox" checked={hideSmall} onChange={(e) => setHideSmall(e.target.checked)} />
             Hide small balances (&lt; ₹10)
           </label>
         </div>
-        <div className="overflow-x-auto">
+        
+        {/* Mobile Card View */}
+        <div className="block lg:hidden">
+          <div className="space-y-3">
+            {tableRows.map((h) => (
+              <div key={h.symbol} className="premium-card rounded-lg p-3 border border-borderSubtle">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3 font-heading font-semibold">
+                    <CoinLogo symbol={h.symbol} />
+                    <div>
+                      <div>{h.symbol.replace('INR', '').replace('USDT', '')}</div>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#111a2a] border border-borderSubtle text-textSecondary">{h.symbol}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-sm text-white">₹{fmt(h.currentValue, 2)}</div>
+                    <div className={`text-xs ${h.pnl >= 0 ? 'text-accent' : 'text-danger'}`}>
+                      {h.pnl >= 0 ? '+' : '-'}₹{fmt(Math.abs(h.pnl), 2)}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-textMuted">Holdings:</span>
+                    <span className="font-mono text-white ml-2">{Number(h.quantity || 0).toFixed(6)}</span>
+                  </div>
+                  <div>
+                    <span className="text-textMuted">Entry:</span>
+                    <span className="font-mono text-white ml-2">₹{fmt(h.avgBuyPrice, 2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-textMuted">Live:</span>
+                    <span className="font-mono text-white ml-2">₹{fmt(h.currentPrice, 2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-textMuted">PnL%:</span>
+                    <span className="ml-2"><PercentageBadge val={h.pnlPercent || 0} /></span>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end mt-3">
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/trade/${h.symbol}`); }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-accent text-accent hover:bg-accent hover:text-[#060810] text-xs font-bold transition-all">
+                    <Zap size={11} /> TRADE
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Desktop Table View */}
+        <div className="hidden lg:block overflow-x-auto">
         <table className="w-full text-sm min-w-[1400px]">
           <thead className="bg-[#0d1320] border-b border-borderSubtle">
             <tr className="text-textSecondary">
@@ -670,7 +722,7 @@ const Portfolio = () => {
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('live')}>Live Price</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('value')}>Current Value</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('pnl')}>PnL ₹</th>
-              <th className="p-4 text-right cursor-pointer" onClick={() => onSort('pnlPct')}>PnL %</th>
+              <th className="p-4 text-right"><PercentageBadge val={h.pnlPercent || 0} /></th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('change24h')}>24h Change %</th>
               <th className="p-4 text-right cursor-pointer" onClick={() => onSort('weight')}>Weight %</th>
               <th className="p-4 text-center">Actions</th>

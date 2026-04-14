@@ -167,86 +167,86 @@ const Dashboard = () => {
   const total = qty * Number(quickCoin?.lastPrice || 0);
 
   return (
-    <div className="w-full max-w-[1680px] mx-auto space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+    <div className="w-full max-w-[1680px] mx-auto space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         <StatCard title="Available Balance" value={summary?.balance ?? 1000000} index={0} sparkle />
         <StatCard title="Portfolio Value" value={summary?.currentValue} index={1} />
         <StatCard title="Unrealized PnL" value={summary?.pnl} percent={summary?.pnlPercent ?? 0} index={2} />
         <StatCard title="24H Revenue" value={summary?.dayRevenue ?? summary?.pnl ?? 1268} percent={1.2} trend={1} index={3} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         <div className="lg:col-span-8">
           <ChartPanel symbol="BTCINR" livePrice={prices.BTCINR?.lastPrice} change24h={prices.BTCINR?.change24h} />
         </div>
         <div className="lg:col-span-4 premium-card rounded-xl overflow-hidden flex flex-col dashboard-fade-in" style={{ animationDelay: '0.3s' }}>
-          <div className="px-6 py-4 border-b border-borderSubtle font-heading text-[18px] font-bold">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-borderSubtle font-heading text-[16px] sm:text-[18px] font-bold">
             Top Gainers 🚀
           </div>
           <div className="flex-1">
             {gainers.map((coin, idx) => (
-              <div key={coin.symbol} onClick={() => navigate(`/trade/${coin.symbol}`)} className={`flex items-center justify-between px-3 py-3 mx-2 hover:bg-white/3 rounded-[10px] cursor-pointer transition-all ${idx === gainers.length - 1 ? '' : 'border-b border-borderSubtle'}`}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-white" style={{ background: gradientCycle[idx % gradientCycle.length] }}>
+              <div key={coin.symbol} onClick={() => navigate(`/trade/${coin.symbol}`)} className={`flex items-center justify-between px-2 sm:px-3 py-2 sm:py-3 mx-1 sm:mx-2 hover:bg-white/3 rounded-[8px] sm:rounded-[10px] cursor-pointer transition-all ${idx === gainers.length - 1 ? '' : 'border-b border-borderSubtle'}`}>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-semibold text-white text-xs sm:text-sm" style={{ background: gradientCycle[idx % gradientCycle.length] }}>
                     {coin.symbol.charAt(0)}
                   </div>
                   <div>
-                    <div className="font-heading font-semibold text-textPrimary">{coin.symbol.replace('INR', '')}</div>
-                    <div className="text-[11px] text-textMuted">Vol: {coin.volume < 1000 ? coin.volume.toFixed(1) : `${(coin.volume / 1000).toFixed(1)}K`}</div>
+                    <div className="font-heading font-semibold text-textPrimary text-sm sm:text-base">{coin.symbol.replace('INR', '')}</div>
+                    <div className="text-[10px] sm:text-[11px] text-textMuted">Vol: {coin.volume < 1000 ? coin.volume.toFixed(1) : `${(coin.volume / 1000).toFixed(1)}K`}</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono font-semibold text-sm">₹{coin.lastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                  <span className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md text-[11px] font-bold border border-[#00D08440] bg-[#00D08426] text-accent">▲ {coin.change24h.toFixed(2)}%</span>
+                  <div className="font-mono font-semibold text-xs sm:text-sm">₹{coin.lastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                  <span className="inline-flex items-center gap-1 mt-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-bold border border-[#00D08440] bg-[#00D08426] text-accent">▲ {coin.change24h.toFixed(2)}%</span>
                 </div>
               </div>
             ))}
-            {!gainers.length && <div className="m-4 h-40 rounded-xl shimmer bg-[#101821]" />}
+            {!gainers.length && <div className="m-2 sm:m-4 h-32 sm:h-40 rounded-xl shimmer bg-[#101821]" />}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         <div className="lg:col-span-8 premium-card rounded-xl overflow-hidden dashboard-fade-in" style={{ animationDelay: '0.4s' }}>
-          <div className="px-6 py-4 border-b border-borderSubtle font-heading font-bold text-lg flex justify-between items-center">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-borderSubtle font-heading font-bold text-base sm:text-lg flex justify-between items-center">
             Recent Executions
             <Link to="/portfolio" className="text-xs text-textSecondary hover:text-accent flex items-center">View all <ArrowRight size={14} className="ml-1" /></Link>
           </div>
           {history?.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-[#10151c] text-xs text-textSecondary uppercase tracking-wider">
+              <table className="w-full text-left text-xs sm:text-sm border-collapse">
+                <thead className="bg-[#10151c] text-[10px] sm:text-xs text-textSecondary uppercase tracking-wider">
                   <tr>
-                    <th className="px-5 py-3">Time</th>
-                    <th className="px-5 py-3">Pair</th>
-                    <th className="px-5 py-3">Type</th>
-                    <th className="px-5 py-3 text-right">Price</th>
-                    <th className="px-5 py-3 text-right">Quantity</th>
-                    <th className="px-5 py-3 text-right">Total</th>
-                    <th className="px-5 py-3 text-right">Status</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3">Time</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3">Pair</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3">Type</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3 text-right hidden sm:table-cell">Price</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3 text-right hidden sm:table-cell">Quantity</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3 text-right">Total</th>
+                    <th className="px-3 sm:px-5 py-2 sm:py-3 text-right hidden sm:table-cell">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {history.slice(0, 7).map((trade, idx) => (
                     <tr key={trade._id} className={`border-b border-borderSubtle/70 hover:bg-white/3 ${idx % 2 === 1 ? 'bg-[#0a111a]' : ''}`}>
-                      <td className="px-5 py-3 text-textSecondary font-mono">{new Date(trade.timestamp).toLocaleTimeString()}</td>
-                      <td className="px-5 py-3 font-heading font-semibold">{trade.symbol}</td>
-                      <td className="px-5 py-3"><OrderBadge type={trade.type} /></td>
-                      <td className="px-5 py-3 text-right font-mono">₹{trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                      <td className="px-5 py-3 text-right font-mono">{trade.quantity.toFixed(6)}</td>
-                      <td className="px-5 py-3 text-right font-mono">₹{(trade.price * trade.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                      <td className="px-5 py-3 text-right"><span className="text-[11px] border border-borderSubtle px-2 py-1 rounded-md text-textSecondary">Filled</span></td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3 text-textSecondary font-mono text-xs">{new Date(trade.timestamp).toLocaleTimeString()}</td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3 font-heading font-semibold text-xs sm:text-sm">{trade.symbol}</td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3"><OrderBadge type={trade.type} /></td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3 text-right font-mono text-xs hidden sm:table-cell">₹{trade.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3 text-right font-mono text-xs hidden sm:table-cell">{trade.quantity.toFixed(6)}</td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3 text-right font-mono text-xs">₹{(trade.price * trade.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 sm:px-5 py-2 sm:py-3 text-right hidden sm:table-cell"><span className="text-[10px] border border-borderSubtle px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md text-textSecondary">Filled</span></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <div className="h-[250px] flex flex-col items-center justify-center text-center">
-              <div className="w-14 h-14 rounded-full border border-borderSubtle bg-[#111a24] flex items-center justify-center text-textMuted mb-3">
-                <ReceiptText size={26} />
+            <div className="h-[200px] sm:h-[250px] flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-borderSubtle bg-[#111a24] flex items-center justify-center text-textMuted mb-3">
+                <ReceiptText size={20} className="sm:size-26" />
               </div>
-              <h4 className="font-heading text-lg mb-1">No trades yet</h4>
+              <h4 className="font-heading text-base sm:text-lg mb-1">No trades yet</h4>
               <p className="text-sm text-textMuted mb-4">Execute your first trade from the Markets page</p>
               <Link to="/market" className="px-4 py-2 rounded-lg bg-accent text-bg-base font-semibold shadow-glowGreen hover:brightness-110 active:scale-[0.97] transition-all">Explore Markets →</Link>
             </div>
