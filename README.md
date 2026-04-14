@@ -121,37 +121,37 @@ A premium, full-stack cryptocurrency paper-trading platform designed to mirror r
 ### 🌐 Live Deployment
 View the live application: [CryptoArena Live](https://crypto-arena-black.vercel.app/)
 
-## � Screenshots
+## 📸 Screenshots
 
 ### 🏠 Dashboard
 ![Dashboard](./screenshots/dashboard.png)
 *Main dashboard with real-time portfolio overview and market statistics*
 
-### 💰 Portfolio Management
-![Portfolio](./screenshots/portfolio.png)
+### 💰 Portfolio Overview
+![Portfolio Overview](./screenshots/portfolio_overview.png)
 *Comprehensive portfolio view with holdings, P&L analytics, and asset allocation*
 
 ### 📊 Trading Interface
 ![Trade Page](./screenshots/trade.png)
 *Professional trading terminal with live charts, order book, and instant execution*
 
-### 📱 Mobile Experience
-![Mobile View](./screenshots/mobile.png)
-*Fully responsive mobile interface optimized for trading on the go*
+### 📱 Holdings View
+![Holdings](./screenshots/holdings.png)
+*Detailed holdings view with individual coin positions and performance metrics*
 
 ### 🏆 Leaderboard
 ![Leaderboard](./screenshots/leaderboard.png)
 *Global rankings based on real-time portfolio valuations and performance metrics*
 
-### 🤝 Authentication & Onboarding
-![Login](./screenshots/login.png)
-*Secure authentication system with user registration and login interface*
-
-### � Market Overview
-![Market](./screenshots/market.png)
+### 📈 Markets
+![Markets](./screenshots/Markets.png)
 *Live market data with price charts, volume indicators, and top gainers/losers*
 
-## ��📱 Mobile Responsiveness
+### � Trade History
+![Trade History](./screenshots/tradeHistory.png)
+*Complete transaction history with detailed execution data and trade analytics*
+
+## ��� Mobile Responsiveness
 
 CryptoArena is fully optimized for mobile devices:
 - **Responsive Design**: Adapts seamlessly to smartphones, tablets, and desktops
